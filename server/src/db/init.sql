@@ -8,8 +8,8 @@ drop table if exists projects;
 create table if not exists projects
 (
   id int generated always as identity primary key,
-  name varchar not null,
-  repoLink varchar,
-  liveSiteLink varchar
+  name varchar(25) not null unique,
+  repoLink varchar(100),
+  liveSiteLink varchar(100) 
 );
 
