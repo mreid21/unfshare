@@ -12,7 +12,7 @@ package-lock.json
 coverage
 
 #build
-./dist
+/dist
 
 # Benchmarking
 benchmarks/graphs
