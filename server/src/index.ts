@@ -1,6 +1,8 @@
 import express from 'express'
 import healthCheckRouter from './routes/healthcheck';
 import projectRouter from './routes/projects';
+import * as dotenv from 'dotenv'
+dotenv.config({path: '../.env'})
 
 const app = express()
 
@@ -11,6 +13,6 @@ app.use('/projects', projectRouter)
 
 
 
-app.listen(8080, () => {
+app.listen(process.env.PORT || 8080, () => {
   console.log('listening on port 8080')
 })
