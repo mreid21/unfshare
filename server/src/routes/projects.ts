@@ -22,8 +22,8 @@ type NewProject = z.infer<typeof NewProject>
 
 
 projectRouter.get('/', async (req, res) => {
-  const {rows} = await pool.query('SELECT * FROM projects')
-  res.status(200).send(rows || [])
+  const projects = await getAllProjects()
+  res.status(200).send(projects)
 })
 
 
@@ -42,10 +42,27 @@ projectRouter.post('/', async (req, res) => {
     res.status(201).send(newProject[0])
   }
   catch (error) {
-    res.status(500).send({error})
+    if (error instanceof Error) {
+      res.status(500).send({error: error.message})
+    }
   }
 
 
+})
+
+
+projectRouter.get('/:id', async (req, res) => {
+  const id = parseInt(req.params.id)
+
+  try {
+    const project = await getProjectById(id)
+    res.status(200).send(project)
+  }
+  catch (error) {
+    if (error instanceof Error) {
+      res.status(500).send({error: error.message})
+    }
+  }
 })
 
 projectRouter.patch('/:id', async (req, res) => {
@@ -67,6 +84,35 @@ projectRouter.delete('/:id', async (req, res) => {
      res.sendStatus(400)
   }
 })
+
+
+const getAllProjects = async (): Promise<Project[]> => {
+  try {
+    const {rows} = await pool.query('SELECT * FROM projects')
+    return rows
+  }
+  catch (error) {
+    throw new Error("Unexpected Error")
+  }
+}
+
+const getProjectById = async (projectId: number): Promise<Project[]> => {
+  try {
+    const {rows} = await pool.query('SELECT * FROM projects WHERE id = $1', [projectId])
+
+    if (rows.length > 0) {
+      return rows
+    }
+  }
+  catch (error) {
+    if (error instanceof PgDatabaseError) {
+      throw new Error(error.message)
+    }
+  }
+
+  throw new Error(`Project with id: ${projectId} not found`)
+
+}
 
 
 const addProject = async (project: NewProject): Promise<Project[]> => {
