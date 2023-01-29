@@ -1,8 +1,15 @@
 import express from 'express'
-import { z, ZodError } from 'zod'
+import invariant from 'tiny-invariant'
+import { AnyZodObject, z, ZodError } from 'zod'
+import {DatabaseError as PgDatabaseError } from 'pg'
 import pool from '../db/pool'
 
 const projectRouter = express.Router()
+
+interface DbError {
+  code: string,
+  clientMessage?: string
+}
 
 const Project = z.object({
   id: z.number(),
@@ -28,11 +35,25 @@ projectRouter.post('/', async (req, res) => {
 
   const result = await NewProject.safeParseAsync(req.body)
 
-  if (result.success) {
-    const db_res = await addProject(result.data)
-    return res.status(201).send(db_res)
+  if (!result.success) {
+    return res.status(400).send(result.error)
   }
-  res.status(400).send(result.error.flatten())
+
+  invariant(result.success, "This shouldn't happen")
+
+  try {
+    const newProject = await addProject(result.data)
+
+    if(Array.isArray(newProject)) {
+      return res.status(201).send(newProject[0])
+    }
+    return res.status(409).send({error: newProject.clientMessage})
+
+  }
+  catch (error) {
+    res.status(500).send({error: 'An unexpected error has occured. Please try again'})
+  }
+
 
 })
 
@@ -57,11 +78,20 @@ projectRouter.delete('/:id', async (req, res) => {
 })
 
 
-const addProject = async (project: NewProject) => {
+const addProject = async (project: NewProject): Promise<Project[] | DbError> => {
   const {name, repoLink, liveSiteLink} = project
-  const {rows} = await pool.query('INSERT INTO projects (name, repoLink, liveSiteLink) VALUES ($1, $2, $3)', [name, repoLink, liveSiteLink])
 
-  return rows
+  try {
+    const {rows} = await pool.query<Project>('INSERT INTO projects (name, repoLink, liveSiteLink) VALUES ($1, $2, $3) returning *', [name, repoLink, liveSiteLink])
+    return rows
+  }
+  catch (error) {
+    if (error instanceof PgDatabaseError && error.code === '23505') {
+      return {clientMessage: `Project with name ${name} already exists`, code: error.code} as DbError
+    }
+  }
+
+  throw new Error("Unexpected error")
 }
 
 const deleteProject = async (projectId: number) => {
