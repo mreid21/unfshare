@@ -1,9 +1,9 @@
-import express from 'express'
+import express from "express"
 
-const healthCheckRouter = express.Router() 
+const healthCheckRouter = express.Router()
 
-healthCheckRouter.get('/', (_, res) => {
-  res.sendStatus(200)
+healthCheckRouter.get("/", (_, res) => {
+    res.sendStatus(200)
 })
 
 export default healthCheckRouter
