@@ -6,10 +6,6 @@ import pool from '../db/pool'
 
 const projectRouter = express.Router()
 
-interface DbError {
-  code: string,
-  clientMessage?: string
-}
 
 const Project = z.object({
   id: z.number(),
@@ -43,15 +39,10 @@ projectRouter.post('/', async (req, res) => {
 
   try {
     const newProject = await addProject(result.data)
-
-    if(Array.isArray(newProject)) {
-      return res.status(201).send(newProject[0])
-    }
-    return res.status(409).send({error: newProject.clientMessage})
-
+    res.status(201).send(newProject[0])
   }
   catch (error) {
-    res.status(500).send({error: 'An unexpected error has occured. Please try again'})
+    res.status(500).send({error})
   }
 
 
@@ -78,7 +69,7 @@ projectRouter.delete('/:id', async (req, res) => {
 })
 
 
-const addProject = async (project: NewProject): Promise<Project[] | DbError> => {
+const addProject = async (project: NewProject): Promise<Project[]> => {
   const {name, repoLink, liveSiteLink} = project
 
   try {
@@ -87,7 +78,7 @@ const addProject = async (project: NewProject): Promise<Project[] | DbError> => 
   }
   catch (error) {
     if (error instanceof PgDatabaseError && error.code === '23505') {
-      return {clientMessage: `Project with name ${name} already exists`, code: error.code} as DbError
+      throw new Error(`Project with name: ${name} already exists`)
     }
   }
 
