@@ -7,14 +7,14 @@ import pool from '../db/pool'
 const projectRouter = express.Router()
 
 class DbError extends Error {
-  inner: typeof PgDatabaseError
-  code: string
+  inner: PgDatabaseError
+  responseStatusCode?: number
 
-  constructor(message: string | undefined, code: string) {
+  constructor(message: string | undefined, inner: PgDatabaseError, responseStatusCode?: number) {
     super(message)
     this.name = "DbError"
-    this.inner = PgDatabaseError
-    this.code = code
+    this.inner = inner
+    this.responseStatusCode = responseStatusCode
   }
 }
 
@@ -58,8 +58,8 @@ projectRouter.post('/', async (req, res) => {
   }
   catch (error) {
     //can map error code to something more semantic
-    if (error instanceof DbError && error.code === '23505') {
-      return res.status(409).send({error: error.message})
+    if (error instanceof DbError && error.responseStatusCode) {
+      return res.status(error.responseStatusCode).send({error: error.message})
     }
 
     res.status(500).send({error: "Something went wrong"})
@@ -74,7 +74,10 @@ projectRouter.get('/:id', async (req, res) => {
 
   try {
     const project = await getProjectById(id)
-    res.status(200).send(project)
+
+    if (project) return res.status(200).send(project)
+
+    return res.status(404).send({error: `Project with id: ${id} not found`})
   }
   catch (error) {
     if (error instanceof Error) {
@@ -135,17 +138,18 @@ const getAllProjects = async (): Promise<Project[]> => {
   }
 }
 
-const getProjectById = async (projectId: number): Promise<Project[]> => {
+const getProjectById = async (projectId: number): Promise<Project | null> => {
   try {
     const {rows} = await pool.query('SELECT * FROM projects WHERE id = $1', [projectId])
-
     if (rows.length > 0) {
-      return rows
+      return rows[0]
     }
+
+    return null
   }
   catch (error) {
     if (error instanceof PgDatabaseError) {
-      throw new Error(error.message)
+      throw new DbError("Internal server error", error)
     }
   }
 
@@ -163,7 +167,7 @@ const addProject = async (project: NewProject): Promise<Project[]> => {
   }
   catch (error) {
     if (error instanceof PgDatabaseError && error.code === '23505') {
-      throw new Error(`Project with name: ${name} already exists`)
+      throw new DbError(`Project with name: ${name} already exists`, error, 409)
     }
   }
 
