@@ -6,6 +6,18 @@ import pool from '../db/pool'
 
 const projectRouter = express.Router()
 
+class DbError extends Error {
+  inner: typeof PgDatabaseError
+  code: string
+
+  constructor(message: string | undefined, code: string) {
+    super(message)
+    this.name = "DbError"
+    this.inner = PgDatabaseError
+    this.code = code
+  }
+}
+
 
 const Project = z.object({
   id: z.number(),
@@ -15,7 +27,10 @@ const Project = z.object({
 })
 
 const NewProject = Project.omit({id: true})
-const ProjectUpdate = Project.pick({repoLink: true, liveSiteLink: true})
+const ProjectUpdate = Project.pick({liveSiteLink: true, repoLink: true})
+.refine(data => data.liveSiteLink || data.repoLink, "Either the live site link or repo link must be updated")
+
+
 
 type Project = z.infer<typeof Project>
 type NewProject = z.infer<typeof NewProject>
@@ -42,9 +57,12 @@ projectRouter.post('/', async (req, res) => {
     res.status(201).send(newProject[0])
   }
   catch (error) {
-    if (error instanceof Error) {
-      res.status(500).send({error: error.message})
+    //can map error code to something more semantic
+    if (error instanceof DbError && error.code === '23505') {
+      return res.status(409).send({error: error.message})
     }
+
+    res.status(500).send({error: "Something went wrong"})
   }
 
 
@@ -66,6 +84,27 @@ projectRouter.get('/:id', async (req, res) => {
 })
 
 projectRouter.patch('/:id', async (req, res) => {
+
+  const id = parseInt(req.params.id)
+  const update = await ProjectUpdate.safeParseAsync(req.body)
+
+  if (!update.success) {
+    return res.status(400).send({error: update.error.flatten().formErrors})
+  }
+
+  invariant(update.success, "This should not happen")
+
+  try {
+    const {repoLink, liveSiteLink} = update.data
+    const updated = await pool.query('UPDATE projects SET liveSiteLink = COALESCE($1, liveSiteLink), repoLink = COALESCE($2, repoLink) WHERE id = $3 RETURNING *', [liveSiteLink, repoLink, id])
+    return res.sendStatus(204)
+  }
+  catch(error) {
+    if (error instanceof Error) {
+      console.log(error.message)
+    }
+    return res.sendStatus(500)
+  }
 
 })
 
